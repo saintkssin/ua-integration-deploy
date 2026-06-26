@@ -5,23 +5,28 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+function env(name, fallback = '') {
+    return (process.env[name] || fallback).trim();
+}
+
 const PLACEHOLDERS = {
-    PIPEDRIVE_API_TOKEN:      process.env.PIPEDRIVE_API_TOKEN      || '',
-    PIPEDRIVE_DOMAIN:         process.env.PIPEDRIVE_DOMAIN         || '',
-    PIPEDRIVE_PIPELINE_ID:    process.env.PIPEDRIVE_PIPELINE_ID    || 'null',
-    PIPEDRIVE_KEY_POS_SYSTEM: process.env.PIPEDRIVE_KEY_POS_SYSTEM || '',
-    PIPEDRIVE_ID_GLOBAL:      process.env.PIPEDRIVE_ID_GLOBAL      || '',
-    PIPEDRIVE_ID_NEW_1:       process.env.PIPEDRIVE_ID_NEW_1       || '',
-    PIPEDRIVE_ID_NEW_2:       process.env.PIPEDRIVE_ID_NEW_2       || '',
-    PIPEDRIVE_ID_OLD:         process.env.PIPEDRIVE_ID_OLD         || '',
-    GOOGLE_CLIENT_ID:         process.env.GOOGLE_CLIENT_ID         || '',
+    PIPEDRIVE_API_TOKEN:      env('PIPEDRIVE_API_TOKEN'),
+    PIPEDRIVE_DOMAIN:         env('PIPEDRIVE_DOMAIN'),
+    PIPEDRIVE_PIPELINE_ID:    env('PIPEDRIVE_PIPELINE_ID', 'null'),
+    PIPEDRIVE_KEY_POS_SYSTEM: env('PIPEDRIVE_KEY_POS_SYSTEM'),
+    PIPEDRIVE_ID_GLOBAL:      env('PIPEDRIVE_ID_GLOBAL'),
+    PIPEDRIVE_ID_NEW_1:       env('PIPEDRIVE_ID_NEW_1'),
+    PIPEDRIVE_ID_NEW_2:       env('PIPEDRIVE_ID_NEW_2'),
+    PIPEDRIVE_ID_OLD:         env('PIPEDRIVE_ID_OLD'),
+    GOOGLE_CLIENT_ID:         env('GOOGLE_CLIENT_ID'),
 };
 
-const missing = Object.entries(PLACEHOLDERS)
-    .filter(([, v]) => v === '' || v === 'null')
-    .map(([k]) => k);
-if (missing.length > 0) {
-    console.warn(`[server] Missing env vars: ${missing.join(', ')}`);
+for (const [k, v] of Object.entries(PLACEHOLDERS)) {
+    if (v === '' || v === 'null') {
+        console.warn(`[server] Missing env var: ${k}`);
+    } else {
+        console.log(`[server] ${k} = "${v.slice(0, 4)}..." (${v.length} chars)`);
+    }
 }
 
 function renderTemplate(filePath) {
