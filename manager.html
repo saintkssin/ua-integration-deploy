@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Менеджер — UA Integration</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0b0f17; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        .ui-card { background-color: #111827; border: 1px solid #1f2937; border-radius: 16px; box-shadow: 0 4px 20px -2px rgba(0,0,0,0.3); }
+        .deals-scroll::-webkit-scrollbar { width: 4px; }
+        .deals-scroll::-webkit-scrollbar-track { background: transparent; }
+        .deals-scroll::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 10px; }
+        .tab-active { background-color: #1f2937; color: #fff; }
+        .tab-inactive { color: #64748b; }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col">
+
+    <!-- Header -->
+    <header class="flex items-center gap-4 px-5 py-3 ui-card m-3 mb-0 flex-shrink-0">
+        <button onclick="window.location.href='dashboard.html'" class="flex items-center gap-2 text-slate-400 hover:text-white text-sm font-medium transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            Назад
+        </button>
+        <div class="w-px h-5 bg-gray-700"></div>
+        <div>
+            <h1 id="managerName" class="text-base font-bold text-white leading-tight">Завантаження...</h1>
+            <p id="periodLabel" class="text-[10px] text-slate-400"></p>
+        </div>
+        <div id="statusBar" class="ml-auto text-[11px] text-slate-500"></div>
+    </header>
+
+    <!-- Main content -->
+    <div class="flex gap-3 p-3 flex-1 min-h-0">
+
+        <!-- Left panel 60% -->
+        <div class="flex flex-col gap-3" style="width:60%">
+
+            <!-- KPI row -->
+            <div class="grid grid-cols-4 gap-3 flex-shrink-0">
+                <div class="ui-card px-4 py-2.5 border-l-4 border-l-emerald-400">
+                    <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Нові</h3>
+                    <div id="kpi-new" class="text-2xl font-extrabold text-emerald-400">0</div>
+                </div>
+                <div class="ui-card px-4 py-2.5 border-l-4 border-l-yellow-500">
+                    <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Діючі</h3>
+                    <div id="kpi-old" class="text-2xl font-extrabold text-yellow-400">0</div>
+                </div>
+                <div class="ui-card px-4 py-2.5 border-l-4 border-l-blue-500">
+                    <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Україна</h3>
+                    <div id="kpi-ua" class="text-2xl font-extrabold text-blue-400">0</div>
+                </div>
+                <div class="ui-card px-4 py-2.5 border-l-4 border-l-red-400">
+                    <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global</h3>
+                    <div id="kpi-global" class="text-2xl font-extrabold text-red-400">0</div>
+                </div>
+            </div>
+
+            <!-- Score card -->
+            <div id="scoreCard" class="ui-card px-5 py-3 flex items-center gap-5 flex-shrink-0">
+                <div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Середня оцінка</div>
+                    <div id="scoreValue" class="text-4xl font-black text-slate-500">—</div>
+                </div>
+                <div class="flex-1">
+                    <div id="scoreBar" class="h-2 rounded-full bg-gray-800 overflow-hidden">
+                        <div id="scoreBarFill" class="h-full rounded-full transition-all" style="width:0%;background:#4b5563"></div>
+                    </div>
+                    <div id="scoreDesc" class="text-[11px] text-slate-500 mt-1.5">Немає оцінок</div>
+                </div>
+            </div>
+
+            <!-- Charts row -->
+            <div class="grid grid-cols-2 gap-3 flex-1 min-h-0">
+                <div class="ui-card p-4 flex flex-col min-h-0">
+                    <div class="flex justify-between items-baseline mb-2 border-b border-gray-800/60 pb-2 flex-shrink-0">
+                        <h3 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Нові клієнти</h3>
+                        <div id="metric-new-total" class="text-xl font-black text-emerald-400">0</div>
+                    </div>
+                    <div class="relative min-h-0" style="flex:3">
+                        <canvas id="newDoughnut"></canvas>
+                    </div>
+                    <div class="relative min-h-0" style="flex:2">
+                        <canvas id="newBar"></canvas>
+                    </div>
+                </div>
+                <div class="ui-card p-4 flex flex-col min-h-0">
+                    <div class="flex justify-between items-baseline mb-2 border-b border-gray-800/60 pb-2 flex-shrink-0">
+                        <h3 class="text-xs font-bold text-yellow-500 uppercase tracking-wider">Діючі клієнти</h3>
+                        <div id="metric-old-total" class="text-xl font-black text-yellow-500">0</div>
+                    </div>
+                    <div class="relative min-h-0" style="flex:3">
+                        <canvas id="oldDoughnut"></canvas>
+                    </div>
+                    <div class="relative min-h-0" style="flex:2">
+                        <canvas id="oldBar"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right panel 40% — deal list -->
+        <div class="ui-card flex flex-col min-h-0" style="width:40%">
+            <!-- Tabs -->
+            <div class="flex border-b border-gray-800 flex-shrink-0 px-3 pt-3 gap-1">
+                <button id="tabWon" onclick="switchTab('won')" class="tab-active px-4 py-1.5 rounded-t-lg text-xs font-semibold transition-all">
+                    Won <span id="tabWonCount" class="ml-1 text-[10px] opacity-70"></span>
+                </button>
+                <button id="tabLost" onclick="switchTab('lost')" class="tab-inactive px-4 py-1.5 rounded-t-lg text-xs font-semibold transition-all">
+                    Lost <span id="tabLostCount" class="ml-1 text-[10px] opacity-70"></span>
+                </button>
+            </div>
+            <!-- List -->
+            <div id="dealsList" class="flex-1 overflow-y-auto deals-scroll p-3 space-y-1.5 min-h-0"></div>
+        </div>
+
+    </div>
+
+    <script>
+        const API_TOKEN = '{{PIPEDRIVE_API_TOKEN}}';
+        const PIPELINE_ID = {{PIPEDRIVE_PIPELINE_ID}};
+        const DOMAIN = '{{PIPEDRIVE_DOMAIN}}';
+        const ID_GLOBAL = '{{PIPEDRIVE_ID_GLOBAL}}'; const ID_NEW_1 = '{{PIPEDRIVE_ID_NEW_1}}'; const ID_NEW_2 = '{{PIPEDRIVE_ID_NEW_2}}'; const ID_OLD = '{{PIPEDRIVE_ID_OLD}}';
+        const KEY_POS_SYSTEM = '{{PIPEDRIVE_KEY_POS_SYSTEM}}';
+
+        let KEY_SCORE = null;
+        let managerData = { won: [], lost: [] };
+        let currentTab = 'won';
+        let newDoughnut, oldDoughnut, newBar, oldBar;
+
+        // Плагін: числа над барами
+        const barValuePlugin = {
+            id: 'barValue',
+            afterDatasetsDraw(chart) {
+                const { ctx } = chart;
+                chart.data.datasets.forEach((dataset, i) => {
+                    chart.getDatasetMeta(i).data.forEach((bar, j) => {
+                        const value = dataset.data[j];
+                        if (value === 0) return;
+                        ctx.save();
+                        ctx.font = 'bold 11px Inter, sans-serif';
+                        ctx.fillStyle = '#e2e8f0';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(value, bar.x, bar.y - 4);
+                        ctx.restore();
+                    });
+                });
+            }
+        };
+
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.font.family = 'Inter';
+
+        const params = new URLSearchParams(window.location.search);
+        const MANAGER_NAME = decodeURIComponent(params.get('name') || '');
+
+        function getScoreColor(avg) {
+            if (avg === null) return '#4b5563';
+            if (avg >= 8) return '#22c55e';
+            if (avg >= 6) return '#eab308';
+            return '#ef4444';
+        }
+
+        function loadPeriodFromStorage() {
+            try {
+                const raw = localStorage.getItem('dashboardPeriod');
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch(e) { return null; }
+        }
+
+        function getPeriodRange(saved) {
+            const now = new Date();
+            if (!saved || saved.preset === 'this_month') {
+                return {
+                    from: new Date(now.getFullYear(), now.getMonth(), 1),
+                    to: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59),
+                    label: 'Цього місяця'
+                };
+            }
+            if (saved.preset === 'last_month') {
+                return {
+                    from: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+                    to: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59),
+                    label: 'Минулого місяця'
+                };
+            }
+            if (saved.preset === 'custom' && saved.from && saved.to) {
+                const to = new Date(saved.to); to.setHours(23, 59, 59);
+                return { from: new Date(saved.from), to, label: `${saved.from} — ${saved.to}` };
+            }
+            return {
+                from: new Date(now.getFullYear(), now.getMonth(), 1),
+                to: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59),
+                label: 'Цього місяця'
+            };
+        }
+
+        async function fetchDealFieldKey() {
+            try {
+                const res = await fetch(`https://${DOMAIN}.pipedrive.com/api/v1/dealFields?limit=200&api_token=${API_TOKEN}`);
+                const json = await res.json();
+                const fields = json.data || [];
+                const sf = fields.find(f => f.name && f.name.toLowerCase() === 'score');
+                if (sf) KEY_SCORE = sf.key;
+            } catch(e) { console.error(e); }
+        }
+
+        async function fetchManagerData() {
+            const statusEl = document.getElementById('statusBar');
+            const saved = loadPeriodFromStorage();
+            const range = getPeriodRange(saved);
+
+            document.getElementById('managerName').textContent = MANAGER_NAME || 'Невідомий менеджер';
+            document.getElementById('periodLabel').textContent = range.label;
+
+            statusEl.textContent = 'Завантаження угод...';
+
+            let allDeals = []; let start = 0; let hasMore = true;
+            while (hasMore) {
+                statusEl.textContent = `Завантаження угод... (${allDeals.length})`;
+                const res = await fetch(`https://${DOMAIN}.pipedrive.com/api/v1/deals?status=all_not_deleted&sort=close_time%20DESC&start=${start}&limit=500&api_token=${API_TOKEN}`);
+                const json = await res.json();
+                const page = json.data || [];
+                allDeals.push(...page);
+                const pageHasRelevant = page.some(d => {
+                    const ct = d.close_time || d.won_time || d.lost_time;
+                    if (!ct) return true;
+                    return new Date(ct) >= range.from;
+                });
+                if (!pageHasRelevant) { hasMore = false; break; }
+                if (page.length < 500 || !json.additional_data?.pagination?.more_items_in_collection) hasMore = false;
+                else start += 500;
+            }
+
+            const wonDeals = [];
+            const lostDeals = [];
+
+            allDeals.forEach(deal => {
+                if (parseInt(deal.pipeline_id) !== PIPELINE_ID) return;
+                if (deal.owner_name !== MANAGER_NAME) return;
+                const ctStr = deal.close_time || deal.won_time || deal.lost_time;
+                if (!ctStr) return;
+                const ct = new Date(ctStr);
+                if (ct < range.from || ct > range.to) return;
+
+                const labelStr = String(deal.label || '').trim();
+                const isGlobal = labelStr.includes(ID_GLOBAL);
+                const isNew = labelStr.includes(ID_NEW_1) || labelStr.includes(ID_NEW_2);
+                const isOld = labelStr.includes(ID_OLD);
+                const scoreRaw = KEY_SCORE ? deal[KEY_SCORE] : null;
+                const score = scoreRaw !== null && scoreRaw !== undefined && scoreRaw !== '' ? parseFloat(scoreRaw) : null;
+                const dateStr = ctStr.split(' ')[0];
+
+                const item = { id: deal.id, title: deal.title || 'Без назви', isGlobal, isNew, isOld, score: isNaN(score) ? null : score, date: dateStr };
+
+                if (deal.status === 'won') wonDeals.push(item);
+                else if (deal.status === 'lost') lostDeals.push(item);
+            });
+
+            wonDeals.sort((a, b) => new Date(b.date) - new Date(a.date));
+            lostDeals.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            managerData = { won: wonDeals, lost: lostDeals };
+            statusEl.textContent = '';
+            renderMetrics();
+            renderDeals('won');
+        }
+
+        function renderMetrics() {
+            const won = managerData.won;
+            const newCount = won.filter(d => d.isNew).length;
+            const oldCount = won.filter(d => d.isOld).length;
+            const uaCount = won.filter(d => !d.isGlobal).length;
+            const globalCount = won.filter(d => d.isGlobal).length;
+            const newUa = won.filter(d => d.isNew && !d.isGlobal).length;
+            const newGlobal = won.filter(d => d.isNew && d.isGlobal).length;
+            const oldUa = won.filter(d => d.isOld && !d.isGlobal).length;
+            const oldGlobal = won.filter(d => d.isOld && d.isGlobal).length;
+
+            document.getElementById('kpi-new').textContent = newCount;
+            document.getElementById('kpi-old').textContent = oldCount;
+            document.getElementById('kpi-ua').textContent = uaCount;
+            document.getElementById('kpi-global').textContent = globalCount;
+            document.getElementById('metric-new-total').textContent = newCount;
+            document.getElementById('metric-old-total').textContent = oldCount;
+            document.getElementById('tabWonCount').textContent = `(${won.length})`;
+            document.getElementById('tabLostCount').textContent = `(${managerData.lost.length})`;
+
+            // Score
+            const scores = won.map(d => d.score).filter(s => s !== null);
+            const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+            const color = getScoreColor(avg);
+            const scoreEl = document.getElementById('scoreValue');
+            const barFill = document.getElementById('scoreBarFill');
+            const descEl = document.getElementById('scoreDesc');
+            if (avg !== null) {
+                scoreEl.textContent = avg.toFixed(1);
+                scoreEl.style.color = color;
+                barFill.style.width = (avg / 10 * 100) + '%';
+                barFill.style.background = color;
+                descEl.textContent = avg >= 8 ? 'Відмінно' : avg >= 6 ? 'Добре' : 'Потребує уваги';
+                descEl.style.color = color;
+            } else {
+                scoreEl.textContent = '—';
+                scoreEl.style.color = '#4b5563';
+                barFill.style.width = '0%';
+                descEl.textContent = 'Немає оцінок';
+                descEl.style.color = '#4b5563';
+            }
+
+            const doughnutOpts = { cutout: '70%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8 } } }, responsive: true, maintainAspectRatio: false };
+            const barOpts = { plugins: { legend: { display: false } }, scales: { y: { display: false, beginAtZero: true }, x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } } }, responsive: true, maintainAspectRatio: false };
+
+            if (newDoughnut) newDoughnut.destroy();
+            newDoughnut = new Chart(document.getElementById('newDoughnut').getContext('2d'), {
+                type: 'doughnut',
+                data: { labels: ['UA', 'Global'], datasets: [{ data: [newUa, newGlobal], backgroundColor: ['#3b82f6', '#ef4444'], borderColor: '#111827', borderWidth: 3 }] },
+                options: doughnutOpts
+            });
+
+            if (newBar) newBar.destroy();
+            newBar = new Chart(document.getElementById('newBar').getContext('2d'), {
+                type: 'bar',
+                data: { labels: ['UA', 'Global'], datasets: [{ data: [newUa, newGlobal], backgroundColor: ['#3b82f6', '#ef4444'], borderRadius: 4, maxBarThickness: 32 }] },
+                options: barOpts,
+                plugins: [barValuePlugin]
+            });
+
+            if (oldDoughnut) oldDoughnut.destroy();
+            oldDoughnut = new Chart(document.getElementById('oldDoughnut').getContext('2d'), {
+                type: 'doughnut',
+                data: { labels: ['UA', 'Global'], datasets: [{ data: [oldUa, oldGlobal], backgroundColor: ['#3b82f6', '#ef4444'], borderColor: '#111827', borderWidth: 3 }] },
+                options: doughnutOpts
+            });
+
+            if (oldBar) oldBar.destroy();
+            oldBar = new Chart(document.getElementById('oldBar').getContext('2d'), {
+                type: 'bar',
+                data: { labels: ['UA', 'Global'], datasets: [{ data: [oldUa, oldGlobal], backgroundColor: ['#3b82f6', '#ef4444'], borderRadius: 4, maxBarThickness: 32 }] },
+                options: barOpts,
+                plugins: [barValuePlugin]
+            });
+        }
+
+        function renderDeals(tab) {
+            currentTab = tab;
+            const list = managerData[tab];
+            const container = document.getElementById('dealsList');
+
+            document.getElementById('tabWon').className = tab === 'won' ? 'tab-active px-4 py-1.5 rounded-t-lg text-xs font-semibold transition-all' : 'tab-inactive px-4 py-1.5 rounded-t-lg text-xs font-semibold transition-all';
+            document.getElementById('tabLost').className = tab === 'lost' ? 'tab-active px-4 py-1.5 rounded-t-lg text-xs font-semibold transition-all' : 'tab-inactive px-4 py-1.5 rounded-t-lg text-xs font-semibold transition-all';
+
+            if (list.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-slate-600 text-sm">Немає угод</div>`;
+                return;
+            }
+
+            container.innerHTML = list.map(deal => {
+                const regionBadge = deal.isGlobal
+                    ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/15 text-red-400 border border-red-500/20">Global</span>`
+                    : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/20">UA</span>`;
+                const clientBadge = deal.isNew
+                    ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Новий</span>`
+                    : deal.isOld
+                        ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/20">Старий</span>`
+                        : `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">Без мітки</span>`;
+                const scoreText = deal.score !== null
+                    ? `<span class="font-bold" style="color:${getScoreColor(deal.score)}">${deal.score}</span>`
+                    : `<span class="text-slate-600">—</span>`;
+                return `
+                    <a href="https://${DOMAIN}.pipedrive.com/deal/${deal.id}" target="_blank"
+                       class="block p-2.5 rounded-xl hover:bg-slate-800/50 border border-transparent hover:border-gray-800 transition-all">
+                        <div class="flex items-start justify-between gap-2 mb-1.5">
+                            <div class="text-[11px] font-semibold text-slate-200 leading-tight flex-1 min-w-0 truncate">${deal.title}</div>
+                            <div class="text-[10px] text-slate-500 flex-shrink-0">${deal.date}</div>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            ${regionBadge}
+                            ${clientBadge}
+                            <span class="text-[10px] text-slate-500">Оцінка: ${scoreText}</span>
+                        </div>
+                    </a>`;
+            }).join('');
+        }
+
+        function switchTab(tab) {
+            renderDeals(tab);
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!MANAGER_NAME) {
+                document.getElementById('managerName').textContent = 'Менеджера не вказано';
+                document.getElementById('statusBar').textContent = 'Відсутній параметр ?name= в URL';
+                return;
+            }
+            await fetchDealFieldKey();
+            await fetchManagerData();
+        });
+    </script>
+</body>
+</html>

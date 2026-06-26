@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UA Integration — Дашборд</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { 
+            background-color: #0b0f17; 
+            color: #e2e8f0; 
+            font-family: 'Inter', sans-serif; 
+        }
+        .ui-card {
+            background-color: #111827; 
+            border: 1px solid #1f2937;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar-thumb {
+            background: #1f2937;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex w-full">
+
+    <main class="flex-grow flex flex-col p-4 pl-6 pr-3 min-w-0 h-screen overflow-hidden gap-3">
+
+        <!-- Header + controls combined into one compact row -->
+        <header class="flex flex-wrap items-center gap-3 bg-[#111827]/60 backdrop-blur-md p-3 ui-card">
+            <div class="pr-3 border-r border-gray-800">
+                <h1 class="text-lg font-bold text-white tracking-wide leading-tight">UA Integration</h1>
+                <p class="text-[10px] text-slate-400">cупер красівий дашборд інтеграторів</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <div class="w-2.5 h-2.5 bg-green-500 rounded-full shadow-[0_0_10px_#22c55e] animate-pulse"></div>
+                <span class="text-[10px] font-semibold text-green-400 tracking-wider uppercase">Pipedrive Connected</span>
+            </div>
+
+            <label class="text-sm font-semibold text-slate-400 ml-2">Період:</label>
+            <select id="periodPreset" onchange="handlePresetChange()" class="bg-[#0b0f17] border border-slate-700 text-white px-3 py-1.5 rounded-xl text-sm font-medium cursor-pointer">
+                <option value="this_month">Цього місяця</option>
+                <option value="last_month">Минулого місяця</option>
+                <option value="custom">Календар</option>
+            </select>
+
+            <div id="customDateRange" class="flex items-center gap-2 hidden">
+                <span class="text-xs text-slate-400">З</span>
+                <input type="date" id="dateFrom" class="bg-[#0b0f17] border border-slate-700 text-white px-2 py-1.5 rounded-xl text-sm">
+                <span class="text-xs text-slate-400">По</span>
+                <input type="date" id="dateTo" class="bg-[#0b0f17] border border-slate-700 text-white px-2 py-1.5 rounded-xl text-sm">
+            </div>
+
+            <div class="flex items-center gap-2 ml-auto">
+                <button onclick="copySlackReport()" class="bg-purple-600/20 hover:bg-purple-600 text-purple-400 hover:text-white border border-purple-500/40 font-semibold px-4 py-1.5 rounded-xl text-sm transition-all">
+                    Звіт для Slack/TG
+                </button>
+                <button onclick="exportToGoogleSheets()" class="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/40 font-semibold px-4 py-1.5 rounded-xl text-sm transition-all">
+                    Вигрузити в Google Sheets
+                </button>
+                <button onclick="fetchPipedriveData()" class="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-5 py-1.5 rounded-xl text-sm shadow-lg shadow-blue-600/20 transition-all">
+                    Синхронізувати з CRM
+                </button>
+            </div>
+        </header>
+
+        <!-- KPI row -->
+        <div class="grid grid-cols-6 gap-3">
+            <div class="ui-card px-4 py-2.5 border-l-4 border-l-green-500">
+                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">WON</h3>
+                <div id="kpi-won" class="text-2xl font-extrabold text-green-400">0</div>
+            </div>
+            <div class="ui-card px-4 py-2.5 border-l-4 border-l-red-500">
+                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">LOST</h3>
+                <div id="kpi-lost" class="text-2xl font-extrabold text-red-400">0</div>
+            </div>
+            <div class="ui-card px-4 py-2.5 border-l-4 border-l-blue-500">
+                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Україна</h3>
+                <div id="kpi-ua" class="text-2xl font-extrabold text-blue-400">0</div>
+            </div>
+            <div class="ui-card px-4 py-2.5 border-l-4 border-l-red-400">
+                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global</h3>
+                <div id="kpi-global" class="text-2xl font-extrabold text-red-400">0</div>
+            </div>
+            <div class="ui-card px-4 py-2.5 border-l-4 border-l-emerald-400">
+                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Нові клієнти</h3>
+                <div id="kpi-new" class="text-2xl font-extrabold text-emerald-400">0</div>
+            </div>
+            <div class="ui-card px-4 py-2.5 border-l-4 border-l-yellow-500">
+                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Діючі клієнти</h3>
+                <div id="kpi-old" class="text-2xl font-extrabold text-yellow-400">0</div>
+            </div>
+        </div>
+
+        <!-- New + Old clients side by side -->
+        <div class="grid grid-cols-2 gap-3 flex-shrink-0" style="height: 30%;">
+            <div class="ui-card p-4 flex flex-col h-full overflow-hidden">
+                <div class="flex justify-between items-baseline mb-3 border-b border-gray-800/60 pb-2 flex-shrink-0">
+                    <h3 class="text-xs font-bold text-green-400 uppercase tracking-wider">Нові клієнти</h3>
+                    <div id="metric-new-total" class="text-2xl font-black text-green-400">0</div>
+                </div>
+                <div class="grid grid-cols-2 gap-3 flex-grow min-h-0 overflow-hidden">
+                    <div class="relative min-h-0 overflow-hidden"><canvas id="newDoughnut"></canvas></div>
+                    <div class="relative min-h-0 overflow-hidden"><canvas id="newBarChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="ui-card p-4 flex flex-col h-full overflow-hidden">
+                <div class="flex justify-between items-baseline mb-3 border-b border-gray-800/60 pb-2 flex-shrink-0">
+                    <h3 class="text-xs font-bold text-yellow-500 uppercase tracking-wider">Діючі клієнти</h3>
+                    <div id="metric-old-total" class="text-2xl font-black text-yellow-500">0</div>
+                </div>
+                <div class="grid grid-cols-2 gap-3 flex-grow min-h-0 overflow-hidden">
+                    <div class="relative min-h-0 overflow-hidden"><canvas id="oldDoughnut"></canvas></div>
+                    <div class="relative min-h-0 overflow-hidden"><canvas id="oldBarChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- POS rating, full width -->
+        <div class="ui-card p-4 flex flex-col flex-1 min-h-0" style="min-height: 160px;">
+            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">Рейтинг POS-систем</h3>
+            <div class="relative flex-grow min-h-0">
+                <canvas id="posBarChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Managers, full width -->
+        <div class="ui-card p-4 flex flex-col flex-1 min-h-0" style="min-height: 160px;">
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider mb-2">Чемпіони з дворового футболу</h3>
+            <div class="relative flex-grow min-h-0">
+                <canvas id="userBarChart"></canvas>
+            </div>
+            <div class="flex gap-4 mt-2 justify-center text-[10px] text-slate-400 flex-shrink-0">
+                <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-2 rounded-sm" style="background:#22c55e"></span>8–10</span>
+                <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-2 rounded-sm" style="background:#eab308"></span>6–7</span>
+                <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-2 rounded-sm" style="background:#ef4444"></span>1–5</span>
+                <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-2 rounded-sm" style="background:#4b5563"></span>Без оцінки</span>
+            </div>
+        </div>
+
+        <!-- Status bar -->
+        <div id="statusBar" class="text-[11px] font-medium text-slate-400 text-center bg-[#111827] py-1.5 rounded-xl border border-gray-800 flex-shrink-0">
+            Система готова до глибокого аналізу бази.
+        </div>
+    </main>
+
+    <!-- Narrow right sidebar -->
+    <aside class="w-[280px] min-w-[280px] bg-[#111827] border-l border-gray-800 flex flex-col h-screen">
+        <div class="flex flex-col flex-1 min-h-0 border-b border-gray-800">
+            <div class="p-3 border-b border-gray-800 flex justify-between items-center bg-[#0b0f17]/40">
+                <span class="text-xs font-bold uppercase text-slate-300 tracking-wider">Програні (Lost)</span>
+                <span id="lostCountBadge" class="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded text-[10px] font-bold">0 угод</span>
+            </div>
+            <div class="flex-grow overflow-y-auto p-2 sidebar-scrollbar space-y-1.5 min-h-0" id="lostDealsContainer"></div>
+        </div>
+
+        <div class="flex flex-col flex-1 min-h-0">
+            <div class="p-3 border-b border-gray-800 flex justify-between items-center bg-[#0b0f17]/40">
+                <span class="text-xs font-bold uppercase text-slate-300 tracking-wider">Без міток</span>
+                <span id="noLabelsCountBadge" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-bold">0 угод</span>
+            </div>
+            <div class="flex-grow overflow-y-auto p-2 sidebar-scrollbar space-y-1.5 min-h-0" id="noLabelsContainer"></div>
+        </div>
+    </aside>
+
+    <script>
+        let newDoughnut, oldDoughnut, newBarChart, oldBarChart, userChart, posChart;
+        let isFetching = false; // Захист від повторних тригерів та нескінченних циклів
+        let KEY_SCORE = null;
+        const GOOGLE_CLIENT_ID = '{{GOOGLE_CLIENT_ID}}';
+        let googleAccessToken = null;
+        let googleTokenExpiry = 0;
+
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.font.family = 'Inter';
+
+        // Прямі відповідності для кастомного поля "POS System" (по UUID опції поля)
+        const POS_DECODER = {
+            'fa74dfc5-c5b1-41e9-8cdb-6977d4626436': 'Syrve',
+            'd62e80e4-7c7f-478d-b8f3-a8c674c5f543': 'Poster',
+            '90a40ff7-ea6f-4903-b459-20ef607ba74d': 'Syrve',
+            '0cf34c40-c363-01a2-745c-afc555ccce89': 'R-keeper'
+        };
+
+        // Текстові синоніми для пошуку в назві угоди / комерційному імені / коментарях.
+        // Кожен список ОБ'ЄДНУЄТЬСЯ в одну категорію (ключ об'єкта).
+        const POS_TEXT_SYNONYMS = {
+            'Syrve': ['syrve', 'iiko', 'айко', 'сьорв', 'серв', 'серф'],
+            'Poster': ['poster', 'постер'],
+            'Ultra': ['ultra', 'ультра'],
+            'Profit': ['profit', 'профіт', 'профит'],
+            'Servio': ['servio', 'сервио', 'сервіо'],
+            'R-keeper': ['r-keeper', 'rkeeper', 'р-кипер', 'р-кіпер', 'кипер', 'кіпер'],
+            'Checkbox': ['checkbox', 'чекбокс']
+        };
+
+        function detectPosFromText(text) {
+            if (!text) return null;
+            for (const [category, synonyms] of Object.entries(POS_TEXT_SYNONYMS)) {
+                for (const syn of synonyms) {
+                    if (text.includes(syn)) return category;
+                }
+            }
+            return null;
+        }
+
+        function handlePresetChange() {
+            const preset = document.getElementById('periodPreset').value;
+            document.getElementById('customDateRange').classList.toggle('hidden', preset !== 'custom');
+        }
+
+        function getDatesForPeriod() {
+            const preset = document.getElementById('periodPreset').value;
+            let fromDate, toDate; const now = new Date();
+            if (preset === 'this_month') {
+                fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            } else if (preset === 'last_month') {
+                fromDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                toDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+            } else {
+                const valFrom = document.getElementById('dateFrom').value; const valTo = document.getElementById('dateTo').value;
+                if (!valFrom || !valTo) { alert("Виберіть дати!"); return null; }
+                fromDate = new Date(valFrom); toDate = new Date(valTo); toDate.setHours(23, 59, 59);
+            }
+            return { from: fromDate, to: toDate };
+        }
+
+        async function fetchPipedriveData() {
+            if (isFetching) return; // Якщо запит вже йде, блокуємо повторні виклики
+            isFetching = true;
+
+            const API_TOKEN = '{{PIPEDRIVE_API_TOKEN}}';
+            const PIPELINE_ID = {{PIPEDRIVE_PIPELINE_ID}};
+            const DOMAIN = '{{PIPEDRIVE_DOMAIN}}';
+            const ID_GLOBAL = '{{PIPEDRIVE_ID_GLOBAL}}'; const ID_NEW_1 = '{{PIPEDRIVE_ID_NEW_1}}'; const ID_NEW_2 = '{{PIPEDRIVE_ID_NEW_2}}'; const ID_OLD = '{{PIPEDRIVE_ID_OLD}}';
+            const KEY_POS_SYSTEM = '{{PIPEDRIVE_KEY_POS_SYSTEM}}';
+
+            const range = getDatesForPeriod(); 
+            if (!range) { isFetching = false; return; }
+            
+            const statusEl = document.getElementById('statusBar');
+            statusEl.innerText = `Завантаження списку угод з CRM...`;
+
+            window.dashboardData = { 
+                won: 0, lost: 0, ua_total: 0, global_total: 0, new_clients: 0, new_ua: 0, new_global: 0, old_clients: 0, old_ua: 0, old_global: 0,
+                users: {}, pos_systems: {} 
+            };
+
+            let targetDeals = []; let lostDealsList = []; let noLabelsList = [];
+
+            try {
+                // 1. Завантаження угод воронки, з раннім виходом по даті.
+                //    Угоди відсортовані по close_time DESC, тож щойно ми бачимо
+                //    сторінку, де ВСІ close_time старші за range.from — далі
+                //    шукати немає сенсу, виходимо з циклу.
+                let allDeals = []; let start = 0; let hasMore = true; const limit = 500;
+                while (hasMore) {
+                    statusEl.innerText = `Завантаження угод з CRM... (отримано ${allDeals.length})`;
+                    const dealsUrl = `https://${DOMAIN}.pipedrive.com/api/v1/deals?status=all_not_deleted&sort=close_time%20DESC&start=${start}&limit=${limit}&api_token=${API_TOKEN}`;
+                    const res = await fetch(dealsUrl); const json = await res.json();
+                    const pageDeals = json.data || [];
+                    allDeals.push(...pageDeals);
+
+                    // Перевіряємо, чи вся ця сторінка вже "старіша" за потрібний діапазон
+                    const pageHasRelevant = pageDeals.some(d => {
+                        const ct = d.close_time || d.won_time || d.lost_time;
+                        if (!ct) return true; // угоди без close_time (open) перевіряємо завжди
+                        return new Date(ct) >= range.from;
+                    });
+
+                    if (!pageHasRelevant) { hasMore = false; break; }
+
+                    if (pageDeals.length < limit || !json.additional_data?.pagination?.more_items_in_collection) hasMore = false;
+                    else start += limit;
+                }
+
+                allDeals.forEach(deal => {
+                    if (parseInt(deal.pipeline_id) !== PIPELINE_ID) return;
+                    const closeTimeStr = deal.close_time || deal.won_time || deal.lost_time; if (!closeTimeStr) return;
+                    const closeDate = new Date(closeTimeStr); if (closeDate < range.from || closeDate > range.to) return;
+
+                    if (deal.status === 'won') {
+                        targetDeals.push(deal);
+                    } else if (deal.status === 'lost') {
+                        window.dashboardData.lost++;
+                        lostDealsList.push({ id: deal.id, title: deal.title || 'Без назви', owner: deal.owner_name, reason: deal.lost_reason ? deal.lost_reason.trim() : '', date: closeTimeStr.split(' ')[0] });
+                    }
+                });
+
+                // 2. Завантаження нотаток ТІЛЬКИ для won-угод воронки, через
+                //    /v1/notes?deal_id=X — паралельними батчами замість одного
+                //    запиту на ВЕСЬ акаунт (раніше: 402 сторінки на 96928 угод
+                //    для пошуку нотаток лише ~84 угод).
+                let notesMap = {}; // deal_id -> об'єднаний текст усіх нотаток (lowercase)
+
+                const BATCH_SIZE = 15;
+                for (let i = 0; i < targetDeals.length; i += BATCH_SIZE) {
+                    const batch = targetDeals.slice(i, i + BATCH_SIZE);
+                    statusEl.innerText = `Завантаження коментарів: ${Math.min(i + BATCH_SIZE, targetDeals.length)} / ${targetDeals.length}...`;
+
+                    await Promise.all(batch.map(async (deal) => {
+                        try {
+                            const notesUrl = `https://${DOMAIN}.pipedrive.com/api/v1/notes?deal_id=${deal.id}&limit=100&api_token=${API_TOKEN}`;
+                            const res = await fetch(notesUrl);
+                            const json = await res.json();
+                            const pageNotes = json.data || [];
+                            if (pageNotes.length) {
+                                notesMap[String(deal.id)] = pageNotes.map(n => String(n.content || '').toLowerCase()).join(' ');
+                            }
+                        } catch (err) {
+                            console.error(`Помилка завантаження нотаток для угоди ${deal.id}`, err);
+                        }
+                    }));
+                }
+
+                // 3. Збірка аналітики
+                statusEl.innerText = `Аналізуємо угоди та визначаємо POS-системи...`;
+
+                targetDeals.forEach(deal => {
+                    window.dashboardData.won++;
+                    const ownerName = deal.owner_name || 'Не призначено';
+                    const labelString = String(deal.label || '').trim();
+                    const isGlobal = labelString.includes(ID_GLOBAL);
+                    const isNew = labelString.includes(ID_NEW_1) || labelString.includes(ID_NEW_2);
+                    const isOld = labelString.includes(ID_OLD);
+
+                    if (!window.dashboardData.users[ownerName]) window.dashboardData.users[ownerName] = { ukr: 0, global: 0, scores: [], new_count: 0, old_count: 0 };
+                    if (isGlobal) { window.dashboardData.global_total++; window.dashboardData.users[ownerName].global++; }
+                    else { window.dashboardData.ua_total++; window.dashboardData.users[ownerName].ukr++; }
+
+                    if (KEY_SCORE && deal[KEY_SCORE] !== undefined && deal[KEY_SCORE] !== null && deal[KEY_SCORE] !== '') {
+                        const sc = parseFloat(deal[KEY_SCORE]);
+                        if (!isNaN(sc)) window.dashboardData.users[ownerName].scores.push(sc);
+                    }
+
+                    if (isNew) { window.dashboardData.new_clients++; window.dashboardData.users[ownerName].new_count++; if (isGlobal) window.dashboardData.new_global++; else window.dashboardData.new_ua++; }
+                    else if (isOld) { window.dashboardData.old_clients++; window.dashboardData.users[ownerName].old_count++; if (isGlobal) window.dashboardData.old_global++; else window.dashboardData.old_ua++; }
+                    else { noLabelsList.push({ id: deal.id, title: deal.title || 'Без назви', owner: ownerName, date: (deal.close_time || '').split(' ')[0] }); }
+
+                    // --- Визначення POS-системи ---
+                    // Пріоритет 1: кастомне поле "POS System" в угоді (по UUID опції).
+                    let detectedSystem = null;
+                    let rawPosValue = deal[KEY_POS_SYSTEM] ? String(deal[KEY_POS_SYSTEM]).trim() : '';
+                    if (rawPosValue && POS_DECODER[rawPosValue]) {
+                        detectedSystem = POS_DECODER[rawPosValue];
+                    }
+
+                    // Пріоритет 2: якщо поле порожнє/невідоме — текстовий пошук синонімів
+                    // у назві угоди, назві організації та коментарях.
+                    if (!detectedSystem) {
+                        const dealTitle = (deal.title || '').toLowerCase();
+                        const orgName = (deal.org_name || '').toLowerCase();
+                        const internalNotes = notesMap[String(deal.id)] || '';
+                        const searchZone = `${dealTitle} ${orgName} ${internalNotes}`;
+
+                        detectedSystem = detectPosFromText(searchZone);
+                    }
+
+                    if (!detectedSystem) detectedSystem = 'Не вказано';
+
+                    if (!window.dashboardData.pos_systems[detectedSystem]) window.dashboardData.pos_systems[detectedSystem] = 0;
+                    window.dashboardData.pos_systems[detectedSystem]++;
+                });
+
+                renderSidebarFeed('lostDealsContainer', 'lostCountBadge', lostDealsList, DOMAIN, true);
+                renderSidebarFeed('noLabelsContainer', 'noLabelsCountBadge', noLabelsList, DOMAIN, false);
+
+                statusEl.innerText = `Готово! Перевірено ${allDeals.length} угод, проаналізовано ${targetDeals.length} виграних угод воронки.`;
+                updateDashboardUI();
+
+            } catch (e) { console.error(e); statusEl.innerText = `Помилка обробки даних CRM.`; }
+            finally { isFetching = false; } // Знімаємо блокування після фінішу
+        }
+
+        function renderSidebarFeed(containerId, badgeId, list, domain, isLost) {
+            const container = document.getElementById(containerId); document.getElementById(badgeId).innerText = `${list.length} угод`;
+            if (list.length === 0) { container.innerHTML = `<div class="text-center py-6 text-slate-600 text-[11px]">Немає даних</div>`; return; }
+            list.sort((a, b) => new Date(b.date) - new Date(a.date));
+            container.innerHTML = list.map(deal => `
+                <a href="https://${domain}.pipedrive.com/deal/${deal.id}" target="_blank" class="block p-2 rounded-xl hover:bg-slate-800/40 border border-transparent hover:border-gray-800 transition-all text-left relative">
+                    <div class="text-[11px] font-semibold text-slate-200 truncate pr-8">${deal.title}</div>
+                    <div class="text-[10px] text-slate-500 truncate">${deal.owner} ${isLost ? `| <span class="text-red-400/70">${deal.reason || 'Без причини'}</span>` : ''}</div>
+                </a>
+            `).join('');
+        }
+
+        function updateDashboardUI() {
+            const d = window.dashboardData;
+            document.getElementById('kpi-won').innerText = d.won;
+            document.getElementById('kpi-lost').innerText = d.lost;
+            document.getElementById('kpi-ua').innerText = d.ua_total;
+            document.getElementById('kpi-global').innerText = d.global_total;
+            document.getElementById('kpi-new').innerText = d.new_clients;
+            document.getElementById('kpi-old').innerText = d.old_clients;
+            document.getElementById('metric-new-total').innerText = d.new_clients;
+            document.getElementById('metric-old-total').innerText = d.old_clients;
+            renderAllCharts();
+        }
+
+        function renderAllCharts() {
+            const d = window.dashboardData;
+
+            // --- НОВІ ---
+            if (newDoughnut) newDoughnut.destroy();
+            newDoughnut = new Chart(document.getElementById('newDoughnut').getContext('2d'), {
+                type: 'doughnut', data: { labels: ['UA', 'Global'], datasets: [{ data: [d.new_ua, d.new_global], backgroundColor: ['#3b82f6', '#ef4444'], borderColor: '#111827', borderWidth: 3 }] },
+                options: { cutout: '70%', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false }
+            });
+            if (newBarChart) newBarChart.destroy();
+            newBarChart = new Chart(document.getElementById('newBarChart').getContext('2d'), {
+                type: 'bar', data: { labels: ['UA', 'Global'], datasets: [{ data: [d.new_ua, d.new_global], backgroundColor: ['#3b82f6', '#ef4444'], borderRadius: 4, maxBarThickness: 24 }] },
+                options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1f2937' } } }, responsive: true, maintainAspectRatio: false }
+            });
+
+            // --- СТАРІ ---
+            if (oldDoughnut) oldDoughnut.destroy();
+            oldDoughnut = new Chart(document.getElementById('oldDoughnut').getContext('2d'), {
+                type: 'doughnut', data: { labels: ['UA', 'Global'], datasets: [{ data: [d.old_ua, d.old_global], backgroundColor: ['#3b82f6', '#ef4444'], borderColor: '#111827', borderWidth: 3 }] },
+                options: { cutout: '70%', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false }
+            });
+            if (oldBarChart) oldBarChart.destroy();
+            oldBarChart = new Chart(document.getElementById('oldBarChart').getContext('2d'), {
+                type: 'bar', data: { labels: ['UA', 'Global'], datasets: [{ data: [d.old_ua, d.old_global], backgroundColor: ['#3b82f6', '#ef4444'], borderRadius: 4, maxBarThickness: 24 }] },
+                options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1f2937' } } }, responsive: true, maintainAspectRatio: false }
+            });
+
+            // --- РЕЙТИНГ POS-СИСТЕМ ---
+            const posKeys = Object.keys(d.pos_systems).sort((a, b) => d.pos_systems[b] - d.pos_systems[a]);
+            const posValues = posKeys.map(k => d.pos_systems[k]);
+            if (posChart) posChart.destroy();
+            posChart = new Chart(document.getElementById('posBarChart').getContext('2d'), {
+                type: 'bar', data: { labels: posKeys, datasets: [{ data: posValues, backgroundColor: '#6366f1', borderRadius: 5, maxBarThickness: 16 }] },
+                options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: { color: '#1f2937' } } }, responsive: true, maintainAspectRatio: false }
+            });
+
+            // --- МЕНЕДЖЕРИ ---
+            const userNames = Object.keys(d.users);
+            const userColors = userNames.map(n => getScoreColor(d.users[n].scores));
+            if (userChart) userChart.destroy();
+            userChart = new Chart(document.getElementById('userBarChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: userNames,
+                    datasets: [
+                        { label: 'UA', data: userNames.map(n => d.users[n].ukr), backgroundColor: userColors, maxBarThickness: 16 },
+                        { label: 'Global', data: userNames.map(n => d.users[n].global), backgroundColor: userColors.map(c => c + 'aa'), maxBarThickness: 16 }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: { x: { stacked: true, grid: { color: '#1f2937' } }, y: { stacked: true } },
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        function getPeriodLabel() {
+            const preset = document.getElementById('periodPreset').value;
+            if (preset === 'this_month') return 'цього місяця';
+            if (preset === 'last_month') return 'минулого місяця';
+            const valFrom = document.getElementById('dateFrom').value;
+            const valTo = document.getElementById('dateTo').value;
+            return `за період ${valFrom} — ${valTo}`;
+        }
+
+        function copySlackReport() {
+            const d = window.dashboardData;
+            if (!d) {
+                alert('Спочатку синхронізуйте дані з CRM!');
+                return;
+            }
+
+            const periodLabel = getPeriodLabel();
+
+            // Менеджери: сортуємо по загальній кількості (UA + Global) за спаданням
+            const managerNames = Object.keys(d.users).sort((a, b) => {
+                const totalA = d.users[a].ukr + d.users[a].global;
+                const totalB = d.users[b].ukr + d.users[b].global;
+                return totalB - totalA;
+            });
+
+            const managerLines = managerNames.map(name => {
+                const u = d.users[name];
+                return `— ${name} підключив ${u.ukr + u.global} інтеграцій (Україна — ${u.ukr}, Global — ${u.global})`;
+            }).join('\n');
+
+            // POS-системи: сортуємо за спаданням
+            const posKeys = Object.keys(d.pos_systems).sort((a, b) => d.pos_systems[b] - d.pos_systems[a]);
+            const posLines = posKeys.map(k => `— ${k} — ${d.pos_systems[k]}`).join('\n');
+
+            const report =
+`${periodLabel} було:
+Опрацьовано запитів — ${d.won}
+
+Нові клієнти — ${d.new_clients}
+— Україна — ${d.new_ua}
+— Global — ${d.new_global}
+
+Діючі клієнти — ${d.old_clients}
+— Україна — ${d.old_ua}
+— Global — ${d.old_global}
+
+Втрачені угоди (lost) — ${d.lost}
+
+Менеджери:
+${managerLines}
+
+POS-системи:
+${posLines}
+
+Тримаємо та підтримуємо високу планку!`;
+
+            navigator.clipboard.writeText(report).then(() => {
+                const statusEl = document.getElementById('statusBar');
+                const prevText = statusEl.innerText;
+                statusEl.innerText = 'Звіт скопійовано в буфер обміну!';
+                setTimeout(() => { statusEl.innerText = prevText; }, 2500);
+            }).catch(err => {
+                console.error('Не вдалося скопіювати звіт:', err);
+                alert('Не вдалося скопіювати звіт. Спробуйте ще раз.');
+            });
+        }
+
+        // --- ДОПОМІЖНІ ФУНКЦІЇ ---
+        function getScoreColor(scores) {
+            if (!scores || scores.length === 0) return '#4b5563';
+            const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+            if (avg >= 8) return '#22c55e';
+            if (avg >= 6) return '#eab308';
+            return '#ef4444';
+        }
+
+        function savePeriodToStorage() {
+            const preset = document.getElementById('periodPreset').value;
+            const data = { preset };
+            if (preset === 'custom') {
+                data.from = document.getElementById('dateFrom').value;
+                data.to = document.getElementById('dateTo').value;
+            }
+            localStorage.setItem('dashboardPeriod', JSON.stringify(data));
+        }
+
+        async function fetchDealFields() {
+            const API_TOKEN = '{{PIPEDRIVE_API_TOKEN}}';
+            const DOMAIN = '{{PIPEDRIVE_DOMAIN}}';
+            try {
+                const res = await fetch(`https://${DOMAIN}.pipedrive.com/api/v1/dealFields?limit=200&api_token=${API_TOKEN}`);
+                const json = await res.json();
+                const fields = json.data || [];
+                const scoreField = fields.find(f => f.name && f.name.toLowerCase() === 'score');
+                if (scoreField) { KEY_SCORE = scoreField.key; console.log('KEY_SCORE знайдено:', KEY_SCORE); }
+                else console.warn('Поле "score" не знайдено в dealFields');
+            } catch(e) { console.error('Не вдалося завантажити dealFields:', e); }
+        }
+
+        // --- GOOGLE SHEETS (Service Account, без OAuth popup, працює з file://) ---
+
+        // Генерує JWT та обмінює на access token через Web Crypto API
+        async function generateSAToken(sa) {
+            const b64url = str => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+            const now = Math.floor(Date.now() / 1000);
+            const header  = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+            const payload = b64url(JSON.stringify({
+                iss: sa.client_email,
+                scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive',
+                aud: 'https://oauth2.googleapis.com/token',
+                exp: now + 3600,
+                iat: now
+            }));
+            const signingInput = `${header}.${payload}`;
+            const pemKey = sa.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, '');
+            const keyData = Uint8Array.from(atob(pemKey), c => c.charCodeAt(0));
+            const cryptoKey = await crypto.subtle.importKey(
+                'pkcs8', keyData.buffer,
+                { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+                false, ['sign']
+            );
+            const sigBytes = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signingInput));
+            const sig = b64url(String.fromCharCode(...new Uint8Array(sigBytes)));
+            const jwt = `${signingInput}.${sig}`;
+            const res = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`
+            });
+            const json = await res.json();
+            if (json.error) throw new Error(json.error_description || json.error);
+            return json.access_token;
+        }
+
+        async function getGoogleToken() {
+            if (googleAccessToken && Date.now() < googleTokenExpiry) return googleAccessToken;
+            const raw = localStorage.getItem('gsa_json');
+            if (!raw) throw new Error('NO_SA');
+            const token = await generateSAToken(JSON.parse(raw));
+            googleAccessToken = token;
+            googleTokenExpiry = Date.now() + 55 * 60 * 1000;
+            return token;
+        }
+
+        // --- SA Modal ---
+        function openSAModal() {
+            const stored = localStorage.getItem('gsa_json');
+            if (stored) document.getElementById('saJsonInput').value = stored;
+            document.getElementById('saModal').classList.remove('hidden');
+        }
+        function closeSAModal() {
+            document.getElementById('saModal').classList.add('hidden');
+        }
+        async function saveSAAndExport() {
+            const raw = document.getElementById('saJsonInput').value.trim();
+            try { JSON.parse(raw); } catch(e) { alert('Невалідний JSON. Перевірте файл сервісного акаунту.'); return; }
+            localStorage.setItem('gsa_json', raw);
+            googleAccessToken = null;
+            closeSAModal();
+            await exportToGoogleSheets();
+        }
+        function resetSAAuth() {
+            if (!confirm('Видалити збережений ключ сервісного акаунту?')) return;
+            localStorage.removeItem('gsa_json');
+            googleAccessToken = null; googleTokenExpiry = 0;
+            document.getElementById('statusBar').innerText = 'Ключ видалено. Наступний експорт запитає новий.';
+        }
+
+        // Повертає "06.2026" — ідентифікатор блоку місяця у таблиці
+        function getMonthLabel() {
+            const preset = document.getElementById('periodPreset').value;
+            const now = new Date();
+            let dt = now;
+            if (preset === 'last_month') dt = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            else if (preset === 'custom') { const v = document.getElementById('dateFrom').value; if (v) dt = new Date(v); }
+            return `${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()}`;
+        }
+
+        // Знаходить або створює таблицю "UA Integration — Звіти", повертає spreadsheetId
+        async function findOrCreateSpreadsheet(token) {
+            const BOOK_TITLE = 'UA Integration — Звіти';
+            const q = encodeURIComponent(`name='${BOOK_TITLE}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
+            const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, { headers: { Authorization: `Bearer ${token}` } });
+            const searchJson = await searchRes.json();
+            if (searchJson.files && searchJson.files.length > 0) return searchJson.files[0].id;
+            const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ properties: { title: BOOK_TITLE }, sheets: [{ properties: { title: 'Загальне' } }] })
+            });
+            const createJson = await createRes.json();
+            if (!createJson.spreadsheetId) throw new Error('Не вдалося створити таблицю: ' + JSON.stringify(createJson));
+            return createJson.spreadsheetId;
+        }
+
+        // Повертає масив значень колонки A для вказаного листа
+        async function getColumnA(token, spreadsheetId, sheetTitle) {
+            const range = encodeURIComponent(`'${sheetTitle}'!A:A`);
+            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`, { headers: { Authorization: `Bearer ${token}` } });
+            const json = await res.json();
+            if (!json.values) return [];
+            return json.values.map(row => (row[0] || '').toString());
+        }
+
+        // Знаходить існуючі листи та створює відсутні; повертає { title: sheetId }
+        async function ensureSheets(token, spreadsheetId, titles) {
+            const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`, { headers: { Authorization: `Bearer ${token}` } });
+            const meta = await metaRes.json();
+            const result = {};
+            (meta.sheets || []).forEach(s => { result[s.properties.title] = s.properties.sheetId; });
+            const toCreate = titles.filter(t => !(t in result));
+            if (toCreate.length > 0) {
+                const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ requests: toCreate.map(title => ({ addSheet: { properties: { title } } })) })
+                });
+                const addJson = await addRes.json();
+                addJson.replies.forEach((reply, i) => { result[toCreate[i]] = reply.addSheet.properties.sheetId; });
+            }
+            return result;
+        }
+
+        // Пише блок рядків починаючи з рядка з monthLabel або дописує знизу.
+        // Повертає 0-based startRow де записаний блок.
+        // searchFrom — мінімальна позиція пошуку мітки місяця (для листів менеджерів = 2)
+        async function writeBlock(token, spreadsheetId, sheetId, sheetTitle, monthLabel, blockRows, searchFrom = 0) {
+            const blockHeight = blockRows.length;
+            const colA = await getColumnA(token, spreadsheetId, sheetTitle);
+
+            let S = -1;
+            for (let i = searchFrom; i < colA.length; i++) {
+                if (colA[i] === monthLabel) { S = i; break; }
+            }
+
+            if (S >= 0) {
+                const monthPat = /^\d{2}\.\d{4}$/;
+                let T = -1;
+                for (let i = S + 1; i < colA.length; i++) {
+                    if (monthPat.test(colA[i])) { T = i; break; }
+                }
+                const oldHeight = T >= 0 ? (T - S - 2) : (colA.length - S);
+                if (T >= 0 && blockHeight > oldHeight) {
+                    const insertCount = blockHeight - oldHeight;
+                    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+                        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ requests: [{ insertDimension: { range: { sheetId, dimension: 'ROWS', startIndex: S + oldHeight, endIndex: S + oldHeight + insertCount }, inheritFromBefore: false } }] })
+                    });
+                }
+                const clearHeight = Math.max(oldHeight, blockHeight);
+                await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`, {
+                    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ranges: [`'${sheetTitle}'!A${S + 1}:Z${S + clearHeight}`] })
+                });
+                await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+                    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ valueInputOption: 'RAW', data: [{ range: `'${sheetTitle}'!A${S + 1}`, values: blockRows }] })
+                });
+                return S;
+            } else {
+                // Шукаємо останній заповнений рядок починаючи з searchFrom
+                let lastRow = -1;
+                for (let i = colA.length - 1; i >= searchFrom; i--) {
+                    if (colA[i].trim() !== '') { lastRow = i; break; }
+                }
+                // Якщо нічого не знайдено від searchFrom — починаємо з searchFrom (після шапки менеджера)
+                const appendStart = lastRow >= 0 ? lastRow + 3 : searchFrom;
+                await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+                    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ valueInputOption: 'RAW', data: [{ range: `'${sheetTitle}'!A${appendStart + 1}`, values: blockRows }] })
+                });
+                return appendStart;
+            }
+        }
+
+        async function updateSpreadsheetData(token, spreadsheetId) {
+            const d = window.dashboardData;
+            const posKeys = Object.keys(d.pos_systems).sort((a, b) => d.pos_systems[b] - d.pos_systems[a]);
+            const managerNames = Object.keys(d.users).sort((a, b) => (d.users[b].ukr + d.users[b].global) - (d.users[a].ukr + d.users[a].global));
+            const monthLabel = getMonthLabel();
+            const N = posKeys.length;
+
+            const sheetMap = await ensureSheets(token, spreadsheetId, ['Загальне', ...managerNames]);
+
+            // Кольорова схема (світла)
+            const BLACK        = { red: 0,       green: 0,       blue: 0       };
+            const BG_MONTH     = { red: 0.855,   green: 0.918,   blue: 0.965   }; // #daeaf6
+            const BG_HEADER    = { red: 0.812,   green: 0.886,   blue: 0.953   }; // #cfe2f3
+            const BG_DATA_ODD  = { red: 0.910,   green: 0.957,   blue: 0.992   }; // #e8f4fd
+            const BG_DATA_EVEN = { red: 1,       green: 1,       blue: 1       }; // #ffffff
+
+            const scoreColor = avg =>
+                avg === null    ? { red: 0.420, green: 0.447, blue: 0.502 }  // сірий #6b7280
+                : avg >= 8      ? { red: 0.082, green: 0.502, blue: 0.239 }  // зелений #15803d
+                : avg >= 6      ? { red: 0.851, green: 0.467, blue: 0.024 }  // бурштин #d97706
+                :                 { red: 0.863, green: 0.149, blue: 0.149 }; // червоний #dc2626
+
+            const rpt = (sId, r0, r1, c0, c1, fmt, fields) => ({
+                repeatCell: {
+                    range: { sheetId: sId, startRowIndex: r0, endRowIndex: r1, ...(c0 != null ? { startColumnIndex: c0, endColumnIndex: c1 } : {}) },
+                    cell: { userEnteredFormat: fmt },
+                    fields
+                }
+            });
+            const batchFmt = (spreadsheetId, reqs) =>
+                fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+                    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ requests: reqs })
+                });
+
+            // ── Лист "Загальне" ──────────────────────────────────────────
+            // Блок (0-based від S):
+            // S+0        мітка місяця
+            // S+1        шапка "Метрика/Значення"
+            // S+2..S+7   6 метрик (зебра)
+            // S+8        порожній рядок
+            // S+9        "POS-системи"
+            // S+10..S+9+N  N рядків POS (зебра)
+            // S+10+N     порожній рядок
+            // S+11+N     шапка менеджерів
+            // S+12+N..   рядки менеджерів (зебра)
+            const generalRows = [
+                [monthLabel, ''],
+                ['Метрика', 'Значення'],
+                ['Виграні угоди (won)', d.won],
+                ['Втрачені угоди (lost)', d.lost],
+                ['Україна', d.ua_total],
+                ['Global', d.global_total],
+                ['Нові клієнти', d.new_clients],
+                ['Діючі клієнти', d.old_clients],
+                ['', ''],
+                ['POS-системи', ''],
+                ...posKeys.map(k => [k, d.pos_systems[k]]),
+                ['', ''],
+                ['Менеджер', 'Won', 'UA', 'Global', 'Нові', 'Діючі', 'Середня оцінка'],
+                ...managerNames.map(name => {
+                    const u = d.users[name];
+                    const avg = u.scores && u.scores.length > 0 ? Math.round(u.scores.reduce((a, b) => a + b, 0) / u.scores.length * 10) / 10 : null;
+                    return [name, u.ukr + u.global, u.ukr, u.global, u.new_count || 0, u.old_count || 0, avg !== null ? avg : '—'];
+                })
+            ];
+            const genSheetId = sheetMap['Загальне'];
+            const S = await writeBlock(token, spreadsheetId, genSheetId, 'Загальне', monthLabel, generalRows);
+
+            const genReqs = [
+                // Мітка місяця
+                rpt(genSheetId, S,   S+1,    null, null, { textFormat: { bold: true, foregroundColor: BLACK }, backgroundColor: BG_MONTH },  'userEnteredFormat.textFormat,userEnteredFormat.backgroundColor'),
+                // Шапка "Метрика/Значення"
+                rpt(genSheetId, S+1, S+2,    null, null, { textFormat: { bold: true, foregroundColor: BLACK }, backgroundColor: BG_HEADER }, 'userEnteredFormat.textFormat,userEnteredFormat.backgroundColor'),
+                // "POS-системи"
+                rpt(genSheetId, S+9, S+10,   null, null, { textFormat: { bold: true, foregroundColor: BLACK }, backgroundColor: BG_HEADER }, 'userEnteredFormat.textFormat,userEnteredFormat.backgroundColor'),
+                // Шапка менеджерів
+                rpt(genSheetId, S+11+N, S+12+N, null, null, { textFormat: { bold: true, foregroundColor: BLACK }, backgroundColor: BG_HEADER }, 'userEnteredFormat.textFormat,userEnteredFormat.backgroundColor'),
+            ];
+            // Зебра метрик (6 рядків S+2..S+7)
+            for (let i = 0; i < 6; i++) {
+                genReqs.push(rpt(genSheetId, S+2+i, S+3+i, null, null,
+                    { textFormat: { foregroundColor: BLACK }, backgroundColor: i % 2 === 0 ? BG_DATA_ODD : BG_DATA_EVEN },
+                    'userEnteredFormat.textFormat.foregroundColor,userEnteredFormat.backgroundColor'));
+            }
+            // Зебра POS
+            for (let i = 0; i < N; i++) {
+                genReqs.push(rpt(genSheetId, S+10+i, S+11+i, null, null,
+                    { textFormat: { foregroundColor: BLACK }, backgroundColor: i % 2 === 0 ? BG_DATA_ODD : BG_DATA_EVEN },
+                    'userEnteredFormat.textFormat.foregroundColor,userEnteredFormat.backgroundColor'));
+            }
+            // Зебра менеджерів + колір оцінки
+            managerNames.forEach((name, i) => {
+                const r = S + 12 + N + i;
+                genReqs.push(rpt(genSheetId, r, r+1, null, null,
+                    { textFormat: { foregroundColor: BLACK }, backgroundColor: i % 2 === 0 ? BG_DATA_ODD : BG_DATA_EVEN },
+                    'userEnteredFormat.textFormat.foregroundColor,userEnteredFormat.backgroundColor'));
+                const u = d.users[name];
+                const avg = u.scores && u.scores.length > 0 ? u.scores.reduce((a, b) => a + b, 0) / u.scores.length : null;
+                genReqs.push(rpt(genSheetId, r, r+1, 6, 7,
+                    { textFormat: { bold: true, foregroundColor: scoreColor(avg) } },
+                    'userEnteredFormat.textFormat'));
+            });
+            await batchFmt(spreadsheetId, genReqs);
+
+            // ── Листи менеджерів ─────────────────────────────────────────
+            // Структура листа:
+            // Рядок 0  — ім'я менеджера (великий жирний, #daeaf6)
+            // Рядок 1  — порожній
+            // Рядок 2+ — блоки по місяцях (3 рядки кожен):
+            //   Sm+0  мітка місяця (#daeaf6)
+            //   Sm+1  шапка Won|UA|Global|Нові|Діючі|Середня оцінка (#cfe2f3)
+            //   Sm+2  дані (#e8f4fd)
+            for (const name of managerNames) {
+                const manSheetId = sheetMap[name];
+
+                // Шапка листа — ім'я менеджера (пишемо завжди, idempotent)
+                await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+                    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ valueInputOption: 'RAW', data: [{ range: `'${name}'!A1`, values: [[name]] }] })
+                });
+                await batchFmt(spreadsheetId, [
+                    rpt(manSheetId, 0, 1, null, null,
+                        { textFormat: { bold: true, fontSize: 14, foregroundColor: BLACK }, backgroundColor: BG_MONTH },
+                        'userEnteredFormat.textFormat,userEnteredFormat.backgroundColor')
+                ]);
+
+                // Місячний блок — searchFrom=2 щоб пропустити шапку
+                const u = d.users[name];
+                const avgVal = u.scores && u.scores.length > 0 ? u.scores.reduce((a, b) => a + b, 0) / u.scores.length : null;
+                const avgDisp = avgVal !== null ? Math.round(avgVal * 10) / 10 : null;
+                const managerRows = [
+                    [monthLabel, '', '', '', '', ''],
+                    ['Won', 'UA', 'Global', 'Нові', 'Діючі', 'Середня оцінка'],
+                    [u.ukr + u.global, u.ukr, u.global, u.new_count || 0, u.old_count || 0, avgDisp !== null ? avgDisp : '—']
+                ];
+                const Sm = await writeBlock(token, spreadsheetId, manSheetId, name, monthLabel, managerRows, 2);
+
+                await batchFmt(spreadsheetId, [
+                    // Мітка місяця
+                    rpt(manSheetId, Sm,   Sm+1, null, null, { textFormat: { bold: true, foregroundColor: BLACK }, backgroundColor: BG_MONTH },  'userEnteredFormat.textFormat,userEnteredFormat.backgroundColor'),
+                    // Шапка
+                    rpt(manSheetId, Sm+1, Sm+2, null, null, { textFormat: { bold: true, foregroundColor: BLACK }, backgroundColor: BG_HEADER }, 'userEnteredFormat.textFormat,userEnteredFormat.backgroundColor'),
+                    // Дані (фон)
+                    rpt(manSheetId, Sm+2, Sm+3, null, null, { textFormat: { foregroundColor: BLACK }, backgroundColor: BG_DATA_ODD },           'userEnteredFormat.textFormat.foregroundColor,userEnteredFormat.backgroundColor'),
+                    // Колір оцінки (колонка F = індекс 5)
+                    rpt(manSheetId, Sm+2, Sm+3, 5, 6, { textFormat: { bold: true, foregroundColor: scoreColor(avgVal) } }, 'userEnteredFormat.textFormat'),
+                ]);
+            }
+        }
+
+        async function exportToGoogleSheets() {
+            if (!window.dashboardData || !window.dashboardData.won) { alert('Спочатку синхронізуйте дані з CRM!'); return; }
+            if (!localStorage.getItem('gsa_json')) { openSAModal(); return; }
+            const statusEl = document.getElementById('statusBar');
+            try {
+                statusEl.innerText = 'Генерація токену (Service Account)...';
+                const token = await getGoogleToken();
+                statusEl.innerText = 'Пошук або створення таблиці...';
+                const spreadsheetId = await findOrCreateSpreadsheet(token);
+                statusEl.innerText = 'Запис даних у таблицю...';
+                await updateSpreadsheetData(token, spreadsheetId);
+                statusEl.innerText = `Вигружено (${getMonthLabel()}) ✓`;
+                setTimeout(() => { statusEl.innerText = 'Готово!'; }, 4000);
+            } catch(e) {
+                console.error(e);
+                if (e.message === 'NO_SA') { openSAModal(); return; }
+                statusEl.innerText = `Помилка: ${e.message}`;
+            }
+        }
+
+        // АВТОМАТИЧНИЙ СТАРТ ПРИ ЗАВАНТАЖЕННІ СТОРІНКИ (Захищений від зациклювання)
+        document.addEventListener("DOMContentLoaded", async () => {
+            // Нативний клік по осі Y графіку менеджерів — Chart.js onClick не підходить,
+            // бо він ігнорує кліки поза chartArea (тобто саме там де лейбли)
+            const userCanvas = document.getElementById('userBarChart');
+            userCanvas.addEventListener('click', (e) => {
+                if (!userChart || !userChart.chartArea) return;
+                const rect = userCanvas.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                if (y < userChart.chartArea.top || y > userChart.chartArea.bottom) return;
+                const labels = userChart.data.labels;
+                if (!labels || labels.length === 0) return;
+                try {
+                    const idx = Math.round(userChart.scales.y.getValueForPixel(y));
+                    if (idx >= 0 && idx < labels.length) {
+                        savePeriodToStorage();
+                        window.open(`manager.html?name=${encodeURIComponent(labels[idx])}`, '_blank');
+                    }
+                } catch(err) {
+                    console.error('Помилка відкриття менеджера:', err);
+                }
+            });
+            userCanvas.addEventListener('mousemove', (e) => {
+                if (!userChart || !userChart.chartArea) return;
+                const rect = userCanvas.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                userCanvas.style.cursor = (y >= userChart.chartArea.top && y <= userChart.chartArea.bottom) ? 'pointer' : 'default';
+            });
+            userCanvas.addEventListener('mouseleave', () => { userCanvas.style.cursor = 'default'; });
+
+            await fetchDealFields();
+            fetchPipedriveData();
+        });
+    </script>
+    <!-- Service Account Modal -->
+    <div id="saModal" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
+        <div class="ui-card p-6 w-full max-w-lg flex flex-col gap-4">
+            <div class="flex items-start justify-between">
+                <div>
+                    <h2 class="text-base font-bold text-white">Google Sheets — Сервісний акаунт</h2>
+                    <p class="text-[11px] text-slate-500 mt-0.5">Вставте JSON-файл ключа сервісного акаунту Google Cloud</p>
+                </div>
+                <button onclick="closeSAModal()" class="text-slate-600 hover:text-white text-lg leading-none ml-4">✕</button>
+            </div>
+
+            <textarea id="saJsonInput" rows="9"
+                class="bg-[#0b0f17] border border-slate-700 focus:border-slate-500 outline-none text-slate-300 text-[11px] px-3 py-2.5 rounded-xl font-mono resize-none w-full transition-colors"
+                placeholder='{"type":"service_account","project_id":"...","client_email":"...@....iam.gserviceaccount.com","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",...}'></textarea>
+
+            <div class="bg-[#0b0f17] border border-slate-800 rounded-xl p-3 text-[10px] text-slate-500 space-y-1">
+                <div class="font-semibold text-slate-400 mb-1.5">Як отримати JSON:</div>
+                <div>1. Google Cloud Console → IAM → Сервісні акаунти → Створити</div>
+                <div>2. Ключі → Додати ключ → JSON → завантажити файл</div>
+                <div>3. Поділитись таблицею "UA Integration — Звіти" з email сервісного акаунту (роль Редактор)</div>
+                <div class="text-slate-600 pt-1">JSON зберігається тільки у localStorage вашого браузера.</div>
+            </div>
+
+            <div class="flex items-center justify-between gap-3">
+                <button onclick="resetSAAuth()" class="text-[11px] text-slate-600 hover:text-red-400 transition-colors">Видалити збережений ключ</button>
+                <div class="flex gap-2">
+                    <button onclick="closeSAModal()" class="px-4 py-1.5 rounded-xl text-sm text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 transition-all">Скасувати</button>
+                    <button onclick="saveSAAndExport()" class="bg-green-600 hover:bg-green-500 text-white font-semibold px-5 py-1.5 rounded-xl text-sm transition-all">Зберегти та вигрузити</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
