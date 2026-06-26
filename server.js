@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 const PLACEHOLDERS = {
     PIPEDRIVE_API_TOKEN:      process.env.PIPEDRIVE_API_TOKEN      || '',
     PIPEDRIVE_DOMAIN:         process.env.PIPEDRIVE_DOMAIN         || '',
-    PIPEDRIVE_PIPELINE_ID:    process.env.PIPEDRIVE_PIPELINE_ID    || '',
+    PIPEDRIVE_PIPELINE_ID:    process.env.PIPEDRIVE_PIPELINE_ID    || 'null',
     PIPEDRIVE_KEY_POS_SYSTEM: process.env.PIPEDRIVE_KEY_POS_SYSTEM || '',
     PIPEDRIVE_ID_GLOBAL:      process.env.PIPEDRIVE_ID_GLOBAL      || '',
     PIPEDRIVE_ID_NEW_1:       process.env.PIPEDRIVE_ID_NEW_1       || '',
@@ -16,6 +16,13 @@ const PLACEHOLDERS = {
     PIPEDRIVE_ID_OLD:         process.env.PIPEDRIVE_ID_OLD         || '',
     GOOGLE_CLIENT_ID:         process.env.GOOGLE_CLIENT_ID         || '',
 };
+
+const missing = Object.entries(PLACEHOLDERS)
+    .filter(([, v]) => v === '' || v === 'null')
+    .map(([k]) => k);
+if (missing.length > 0) {
+    console.warn(`[server] Missing env vars: ${missing.join(', ')}`);
+}
 
 function renderTemplate(filePath) {
     let content = fs.readFileSync(filePath, 'utf8');
